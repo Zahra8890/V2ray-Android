@@ -7,19 +7,14 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
-import dev.dev7dev.v2rayandroid.V2rayController;
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
-import java.io.IOException;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
-
-    private final OkHttpClient client = new OkHttpClient();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,10 +60,24 @@ public class MainActivity extends AppCompatActivity {
                 String vlessUri = "vless://" + uuid + "@" + ip + ":" + port + "?security=" + security + "&encryption=none#MinimalVPN";
 
                 try {
-                    V2rayController.INSTANCE.startV2ray(MainActivity.this, "Minimal Profile", vlessUri, null);
+                    // فراخوانی داینامیک کامپوننت V2ray برای دور زدن تداخل نام پکیج‌ها در جاوا و کاتلین
+                    Class<?> controllerClass = Class.forName("dev.dev7.v2rayandroid.V2rayController");
+                    Object instance = controllerClass.getField("INSTANCE").get(null);
+                    controllerClass.getMethod("startV2ray", android.content.Context.class, String.class, String.class, java.util.ArrayList.class)
+                            .invoke(instance, MainActivity.this, "Minimal Profile", vlessUri, null);
+                    
                     Toast.makeText(MainActivity.this, "در حال اتصال...", Toast.LENGTH_SHORT).show();
                 } catch (Exception e) {
-                    Toast.makeText(MainActivity.this, "خطا در استارت: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    // اگر پکیج اول نبود، پکیج دوم را تست میکند
+                    try {
+                        Class<?> controllerClass = Class.forName("dev.dev7dev.v2rayandroid.V2rayController");
+                        Object instance = controllerClass.getField("INSTANCE").get(null);
+                        controllerClass.getMethod("startV2ray", android.content.Context.class, String.class, String.class, java.util.ArrayList.class)
+                                .invoke(instance, MainActivity.this, "Minimal Profile", vlessUri, null);
+                        Toast.makeText(MainActivity.this, "در حال اتصال...", Toast.LENGTH_SHORT).show();
+                    } catch (Exception ex) {
+                        Toast.makeText(MainActivity.this, "خطا در بارگذاری هسته V2ray", Toast.LENGTH_LONG).show();
+                    }
                 }
             }
         });
@@ -77,7 +86,15 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 try {
-                    V2rayController.INSTANCE.stopV2ray(MainActivity.this);
+                    try {
+                        Class<?> controllerClass = Class.forName("dev.dev7.v2rayandroid.V2rayController");
+                        Object instance = controllerClass.getField("INSTANCE").get(null);
+                        controllerClass.getMethod("stopV2ray", android.content.Context.class).invoke(instance, MainActivity.this);
+                    } catch (Exception e) {
+                        Class<?> controllerClass = Class.forName("dev.dev7dev.v2rayandroid.V2rayController");
+                        Object instance = controllerClass.getField("INSTANCE").get(null);
+                        controllerClass.getMethod("stopV2ray", android.content.Context.class).invoke(instance, MainActivity.this);
+                    }
                     Toast.makeText(MainActivity.this, "اتصال قطع شد", Toast.LENGTH_SHORT).show();
                 } catch (Exception e) {
                     Toast.makeText(MainActivity.this, "خطا در قطع اتصال", Toast.LENGTH_SHORT).show();
@@ -88,45 +105,52 @@ public class MainActivity extends AppCompatActivity {
         btnCheckTraffic.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                String ip = etIp.getText().toString().trim();
-                String uuid = etUuid.getText().toString().trim();
+                final String ip = etIp.getText().toString().trim();
+                final String uuid = etUuid.getText().toString().trim();
 
                 if (ip.isEmpty() || uuid.isEmpty()) {
                     Toast.makeText(MainActivity.this, "وارد کردن IP و UUID الزامی است", Toast.LENGTH_SHORT).show();
                     return;
                 }
 
-                String subUrl = "https://" + ip + ":2096/sub/" + uuid;
-                Request request = new Request.Builder().url(subUrl).build();
-
                 tvTrafficInfo.setText("در حال دریافت اطلاعات...");
 
-                client.newCall(request).enqueue(new Callback() {
+                // اجرای درخواست شبکه در ترد مجزا به صورت بومی (بدون نیاز به OkHttp)
+                new Thread(new Runnable() {
                     @Override
-                    public void onFailure(Call call, IOException e) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                tvTrafficInfo.setText("خطا در اتصال به سرور");
-                            }
-                        });
-                    }
+                    public void run() {
+                        try {
+                            String subUrl = "https://" + ip + ":2096/sub/" + uuid;
+                            URL url = new URL(subUrl);
+                            HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+                            urlConnection.setRequestMethod("GET");
+                            urlConnection.setConnectTimeout(10000);
+                            urlConnection.setReadTimeout(10000);
+                            
+                            final String infoHeader = urlConnection.getHeaderField("Subscription-Userinfo");
+                            urlConnection.disconnect();
 
-                    @Override
-                    public void onResponse(Call call, Response response) throws IOException {
-                        final String infoHeader = response.header("Subscription-Userinfo");
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (infoHeader != null) {
-                                    tvTrafficInfo.setText(parseTrafficHeader(infoHeader));
-                                } else {
-                                    tvTrafficInfo.setText("هدر حجم روی سرور یافت نشد");
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (infoHeader != null && !infoHeader.isEmpty()) {
+                                        tvTrafficInfo.setText(parseTrafficHeader(infoHeader));
+                                    } else {
+                                        tvTrafficInfo.setText("هدر حجم روی سرور یافت نشد");
+                                    }
                                 }
-                            }
-                        });
+                            });
+
+                        } catch (Exception e) {
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    tvTrafficInfo.setText("خطا در اتصال به سرور یا منقضی شدن لینک");
+                                }
+                            });
+                        }
                     }
-                });
+                }).start();
             }
         });
     }
@@ -150,6 +174,8 @@ public class MainActivity extends AppCompatActivity {
 
             long remainingBytes = total - (upload + download);
             double remainingGB = (double) remainingBytes / (1024 * 1024 * 1024);
+
+            if (remainingGB < 0) remainingGB = 0;
 
             return String.format("حجم باقی‌مانده: %.2f GB", remainingGB);
         } catch (Exception e) {
