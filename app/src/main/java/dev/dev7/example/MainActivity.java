@@ -1,115 +1,159 @@
-package com.dev7dev.v2rayandroid
+package dev.dev7.example;
 
-import android.os.Bundle
-import android.widget.Button
-import android.widget.EditText
-import android.widget.TextView
-import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
-import dev.dev7dev.v2rayandroid.V2rayController
-import okhttp3.*
-import java.io.IOException
+import android.os.Bundle;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
+import android.widget.Toast;
+import androidx.appcompat.app.AppCompatActivity;
+import dev.dev7dev.v2rayandroid.V2rayController;
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
-class MainActivity : AppCompatActivity() {
+public class MainActivity extends AppCompatActivity {
 
-    private val client = OkHttpClient()
+    private final OkHttpClient client = new OkHttpClient();
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
 
-        val etIp = findViewById<EditText>(R.id.et_ip)
-        val etPort = findViewById<EditText>(R.id.et_port)
-        val etUuid = findViewById<EditText>(R.id.et_uuid)
-        val btnFixedPort = findViewById<Button>(R.id.btn_fixed_port)
-        val btnStart = findViewById<Button>(R.id.btn_start)
-        val btnStop = findViewById<Button>(R.id.btn_stop)
-        val btnCheckTraffic = findViewById<Button>(R.id.btn_check_traffic)
-        val tvTrafficInfo = findViewById<TextView>(R.id.tv_traffic_info)
+        final EditText etIp = findViewById(R.id.et_ip);
+        final EditText etPort = findViewById(R.id.et_port);
+        final EditText etUuid = findViewById(R.id.et_uuid);
+        Button btnFixedPort = findViewById(R.id.btn_fixed_port);
+        Button btnStart = findViewById(R.id.btn_start);
+        Button btnStop = findViewById(R.id.btn_stop);
+        Button btnCheckTraffic = findViewById(R.id.btn_check_traffic);
+        final TextView tvTrafficInfo = findViewById(R.id.tv_traffic_info);
 
-        btnFixedPort.setOnClickListener {
-            etPort.setText("2096")
-        }
-
-        btnStart.setOnClickListener {
-            val ip = etIp.text.toString().trim()
-            val portStr = etPort.text.toString().trim()
-            val uuid = etUuid.text.toString().trim()
-
-            if (ip.isEmpty() || portStr.isEmpty() || uuid.isEmpty()) {
-                Toast.makeText(this, "لطفاً تمام فیلدها را پر کنید", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+        btnFixedPort.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                etPort.setText("2096");
             }
+        });
 
-            val port = portStr.toIntOrNull() ?: 443
-            val security = if (port == 2096) "tls" else "none"
-            
-            // ساخت لینک اختصاصی VLESS
-            val vlessUri = "vless://$uuid@$ip:$port?security=$security&encryption=none#MinimalVPN"
+        btnStart.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String ip = etIp.getText().toString().trim();
+                String portStr = etPort.getText().toString().trim();
+                String uuid = etUuid.getText().toString().trim();
 
-            try {
-                V2rayController.startV2ray(this, "Minimal Profile", vlessUri, null)
-                Toast.makeText(this, "در حال اتصال...", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this, "خطا در استارت: ${e.message}", Toast.LENGTH_LONG).show()
-            }
-        }
-
-        btnStop.setOnClickListener {
-            V2rayController.stopV2ray(this)
-            Toast.makeText(this, "اتصال قطع شد", Toast.LENGTH_SHORT).show()
-        }
-
-        btnCheckTraffic.setOnClickListener {
-            val ip = etIp.text.toString().trim()
-            val uuid = etUuid.text.toString().trim()
-
-            if (ip.isEmpty() || uuid.isEmpty()) {
-                Toast.makeText(this, "وارد کردن IP و UUID الزامی است", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            // درخواست به پورت ۲۰۹۶ برای دریافت هدر ترافیک باقی‌مانده
-            val subUrl = "https://$ip:2096/sub/$uuid"
-            val request = Request.Builder().url(subUrl).build()
-
-            tvTrafficInfo.text = "در حال دریافت اطلاعات..."
-
-            client.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    runOnUiThread { tvTrafficInfo.text = "خطا در اتصال به سرور" }
+                if (ip.isEmpty() || portStr.isEmpty() || uuid.isEmpty()) {
+                    Toast.makeText(MainActivity.this, "لطفاً تمام فیلدها را پر کنید", Toast.LENGTH_SHORT).show();
+                    return;
                 }
 
-                override fun onResponse(call: Call, response: Response) {
-                    val infoHeader = response.header("Subscription-Userinfo")
-                    runOnUiThread {
-                        if (infoHeader != null) {
-                            tvTrafficInfo.text = parseTrafficHeader(infoHeader)
-                        } else {
-                            tvTrafficInfo.text = "هدر حجم روی سرور یافت نشد"
-                        }
+                int port;
+                try {
+                    port = Integer.parseInt(portStr);
+                } catch (NumberFormatException e) {
+                    port = 443;
+                }
+                
+                String security = (port == 2096) ? "tls" : "none";
+                String vlessUri = "vless://" + uuid + "@" + ip + ":" + port + "?security=" + security + "&encryption=none#MinimalVPN";
+
+                try {
+                    V2rayController.INSTANCE.startV2ray(MainActivity.this, "Minimal Profile", vlessUri, null);
+                    Toast.makeText(MainActivity.this, "در حال اتصال...", Toast.LENGTH_SHORT).show();
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "خطا در استارت: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+
+        btnStop.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    V2rayController.INSTANCE.stopV2ray(MainActivity.this);
+                    Toast.makeText(MainActivity.this, "اتصال قطع شد", Toast.LENGTH_SHORT).show();
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "خطا در قطع اتصال", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+
+        btnCheckTraffic.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String ip = etIp.getText().toString().trim();
+                String uuid = etUuid.getText().toString().trim();
+
+                if (ip.isEmpty() || uuid.isEmpty()) {
+                    Toast.makeText(MainActivity.this, "وارد کردن IP و UUID الزامی است", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                String subUrl = "https://" + ip + ":2096/sub/" + uuid;
+                Request request = new Request.Builder().url(subUrl).build();
+
+                tvTrafficInfo.setText("در حال دریافت اطلاعات...");
+
+                client.newCall(request).enqueue(new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                tvTrafficInfo.setText("خطا در اتصال به سرور");
+                            }
+                        });
                     }
-                }
-            })
-        }
+
+                    @Override
+                    public void onResponse(Call call, Response response) throws IOException {
+                        final String infoHeader = response.header("Subscription-Userinfo");
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (infoHeader != null) {
+                                    tvTrafficInfo.setText(parseTrafficHeader(infoHeader));
+                                } else {
+                                    tvTrafficInfo.setText("هدر حجم روی سرور یافت نشد");
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+        });
     }
 
-    private fun parseTrafficHeader(header: String): String {
-        return try {
-            val pairs = header.split(";").associate {
-                val parts = it.trim().split("=")
-                if (parts.size == 2) parts[0] to (parts[1].toLongOrNull() ?: 0L) else "" to 0L
+    private String parseTrafficHeader(String header) {
+        try {
+            Map<String, Long> pairs = new HashMap<>();
+            String[] parts = header.split(";");
+            for (String part : parts) {
+                String[] kv = part.trim().split("=");
+                if (kv.length == 2) {
+                    try {
+                        pairs.put(kv[0], Long.parseLong(kv[1]));
+                    } catch (NumberFormatException ignored) {}
+                }
             }
-            val upload = pairs["upload"] ?: 0L
-            val download = pairs["download"] ?: 0L
-            val total = pairs["total"] ?: 0L
 
-            val remainingBytes = total - (upload + download)
-            val remainingGB = remainingBytes.toDouble() / (1024 * 1024 * 1024)
+            long upload = pairs.containsKey("upload") ? pairs.get("upload") : 0L;
+            long download = pairs.containsKey("download") ? pairs.get("download") : 0L;
+            long total = pairs.containsKey("total") ? pairs.get("total") : 0L;
 
-            String.format("حجم باقی‌مانده: %.2f GB", remainingGB)
-        } catch (e: Exception) {
-            "خطا در پردازش اطلاعات ترافیک"
+            long remainingBytes = total - (upload + download);
+            double remainingGB = (double) remainingBytes / (1024 * 1024 * 1024);
+
+            return String.format("حجم باقی‌مانده: %.2f GB", remainingGB);
+        } catch (Exception e) {
+            return "خطا در پردازش اطلاعات ترافیک";
         }
     }
 }
