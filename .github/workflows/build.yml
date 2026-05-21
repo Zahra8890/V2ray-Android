@@ -16,6 +16,9 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew # این خط مشکل قفل بودن فایل را حل می‌کند
+
       - name: Build with Gradle
         run: ./gradlew assembleDebug
         
